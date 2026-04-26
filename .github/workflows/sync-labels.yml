@@ -1,0 +1,58 @@
+name: sync-labels
+
+# Syncs labels.yml to every non-archived repo in the supermodellabs org.
+# Prune is on — labels.yml is the full, exclusive set.
+#
+# Auth: a classic PAT in secret ORG_ACTIONS_TOKEN with `repo` scope (and SSO
+# authorized for the org). Replace with a GitHub App token when the org App
+# lands.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+      - .github/workflows/sync-labels.yml
+  schedule:
+    - cron: "0 12 * * 1" # Mondays 12:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      repos: ${{ steps.list.outputs.repos }}
+    steps:
+      - id: list
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ACTIONS_TOKEN }}
+        run: |
+          repos=$(gh api --paginate \
+            -H "Accept: application/vnd.github+json" \
+            '/orgs/supermodellabs/repos?per_page=100&type=all' \
+            --jq '[.[] | select(.archived == false) | .name]' \
+            | jq -c 'add // .')
+          echo "repos=$repos" >> "$GITHUB_OUTPUT"
+          echo "Discovered repos: $repos"
+
+  sync:
+    needs: discover
+    if: needs.discover.outputs.repos != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.discover.outputs.repos) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Sync labels to ${{ matrix.repo }}
+        uses: micnncim/action-label-syncer@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_ACTIONS_TOKEN }}
+        with:
+          manifest: .github/labels.yml
+          prune: true
+          repository: supermodellabs/${{ matrix.repo }}
