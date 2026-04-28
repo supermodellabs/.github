@@ -33,8 +33,7 @@ jobs:
           repos=$(gh api --paginate \
             -H "Accept: application/vnd.github+json" \
             '/orgs/supermodellabs/repos?per_page=100&type=all' \
-            --jq '[.[] | select(.archived == false) | .name]' \
-            | jq -c 'add // .')
+            --jq '[.[] | select(.archived == false) | .name]')
           echo "repos=$repos" >> "$GITHUB_OUTPUT"
           echo "Discovered repos: $repos"
 
